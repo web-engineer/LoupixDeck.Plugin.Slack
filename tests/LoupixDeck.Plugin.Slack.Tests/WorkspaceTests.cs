@@ -196,4 +196,58 @@ public sealed class WorkspaceTests
         Assert.Equal(["slack://open?team=T0002BBBB", "slack://open?team=T0009ZZZZ"], host.Opened);
         plugin.Shutdown();
     }
+
+    // ---- settings page ----
+
+    private static List<string> Cards(SlackPlugin p) =>
+        p.SettingsSchema.Where(d => d.Kind == PluginSettingKind.Heading && d.Key.StartsWith("workspace_")).Select(d => d.Label).ToList();
+
+    private static List<string> Buttons(SlackPlugin p) => p.SettingsActions.Select(a => a.Label).ToList();
+
+    [Fact]
+    public void First_run_shows_one_card_with_the_steps()
+    {
+        var host = new FakeHost();
+        var plugin = new SlackPlugin();
+        plugin.Initialize(host);
+
+        Assert.Equal(["Connect a Slack workspace"], Cards(plugin));
+        Assert.Contains("From a manifest", plugin.SettingsSchema.Single(d => d.Key == "workspace_1").Description);
+        Assert.Contains(plugin.SettingsSchema, d => d.Key == "token_1" && d.Kind == PluginSettingKind.Password);
+        Assert.Equal(["Copy app manifest", "Manage Slack apps", "Test tokens", "Get support", "Report a bug or request a feature"], Buttons(plugin));
+        plugin.Shutdown();
+    }
+
+    [Fact]
+    public async Task Cards_are_named_after_their_workspace_and_can_be_added_and_removed()
+    {
+        var (plugin, host) = await LoadAsync(); // slots 1 and 3
+
+        Assert.Equal(["Acme", "New workspace", "Beta Corp"], Cards(plugin));
+        Assert.DoesNotContain("+ Add workspace", Buttons(plugin)); // slot 2 is still free
+        Assert.Contains("× Remove Acme", Buttons(plugin));
+
+        await plugin.SettingsActions.Single(a => a.Label == "× Remove Acme").Invoke();
+        Assert.Equal("xoxp-beta", host.Values["token_1"]);
+        Assert.Equal("", host.Values["token_3"]);
+        Assert.Equal(["Beta Corp"], Cards(plugin));
+
+        await plugin.SettingsActions.Single(a => a.Label == "+ Add workspace").Invoke();
+        Assert.Equal(["Beta Corp", "New workspace"], Cards(plugin));
+        Assert.DoesNotContain("+ Add workspace", Buttons(plugin));
+        plugin.Shutdown();
+    }
+
+    [Fact]
+    public void Add_stops_at_ten_workspaces()
+    {
+        var host = new FakeHost();
+        for (var i = 1; i <= 10; i++) host.Values[$"token_{i}"] = $"xoxp-{i}";
+        var plugin = new SlackPlugin { HandlerFactory = _ => new FakeSlack() };
+        plugin.Initialize(host);
+
+        Assert.Equal(10, Cards(plugin).Count);
+        Assert.DoesNotContain("+ Add workspace", Buttons(plugin));
+        plugin.Shutdown();
+    }
 }

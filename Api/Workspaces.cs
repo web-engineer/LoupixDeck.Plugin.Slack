@@ -8,11 +8,15 @@ namespace LoupixDeck.Plugin.Slack.Api;
 /// </summary>
 internal sealed class Workspace : IDisposable
 {
-    public Workspace(int slot, SlackApi api)
+    public Workspace(int slot, string token, SlackApi api)
     {
         Slot = slot;
+        Token = token;
         Api = api;
     }
+
+    /// <summary>The token itself, only to carry identities over when the settings change.</summary>
+    internal string Token { get; }
 
     /// <summary>The settings slot (1-based) the token came from.</summary>
     public int Slot { get; }
@@ -55,8 +59,8 @@ internal sealed class Workspace : IDisposable
 /// </summary>
 internal sealed class WorkspaceSet : IDisposable
 {
-    /// <summary>How many token slots the settings page offers.</summary>
-    public const int Slots = 8;
+    /// <summary>The most workspaces the settings page lets you add.</summary>
+    public const int Slots = 10;
 
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
 
@@ -67,7 +71,9 @@ internal sealed class WorkspaceSet : IDisposable
 
     /// <param name="tokens">Token per slot, index 0 = slot 1; blank slots are skipped.</param>
     /// <param name="handler">Test hook: the HTTP handler for a token.</param>
-    public WorkspaceSet(IReadOnlyList<string?> tokens, IPluginLogger log, Func<string, HttpMessageHandler?>? handler = null)
+    /// <param name="previous">The set this one replaces: identities already learnt for the same tokens are kept.</param>
+    public WorkspaceSet(IReadOnlyList<string?> tokens, IPluginLogger log, Func<string, HttpMessageHandler?>? handler = null,
+        WorkspaceSet? previous = null)
     {
         _log = log;
         var all = new List<Workspace>();
@@ -75,7 +81,10 @@ internal sealed class WorkspaceSet : IDisposable
         {
             var token = tokens[i]?.Trim();
             if (string.IsNullOrEmpty(token)) continue;
-            all.Add(new Workspace(i + 1, new SlackApi(() => token, handler?.Invoke(token))));
+            all.Add(new Workspace(i + 1, token, new SlackApi(() => token, handler?.Invoke(token)))
+            {
+                Identity = previous?.All.FirstOrDefault(w => w.Token == token)?.Identity
+            });
         }
 
         All = all;

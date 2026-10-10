@@ -17,6 +17,7 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
     private const string TokenKeyPrefix = "token_";
     private const string LegacyTokenKey = "user_token";
     private const string BringToFrontKey = "bring_to_front";
+    private const string RowsKey = "workspace_rows";
 
     private const string SupportUrl = "https://web-engineer.co.uk/contact";
     private const string IssuesUrl = "https://github.com/web-engineer/LoupixDeck.Plugin.Slack/issues";
@@ -71,6 +72,9 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
         // Through the property, so the gate drives whichever set is current after a settings save.
         WorkspaceGate = new DemandGate(() => Workspaces.Any, () => Workspaces.Start(), () => Workspaces.Stop(), WorkspaceIdle);
 
+        // Learn the workspace names now, so the settings page and the keys can show them.
+        if (Workspaces.Any) _ = Workspaces.IdentifyAsync();
+
         host.Logger.Info((SlackApp.IsInstalled ? "Slack desktop app found" : "Slack desktop app not found; shortcut keys need it") +
                          $"; {Workspaces.All.Count} workspace token(s)");
     }
@@ -89,7 +93,7 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
         // Builds before multi-workspace support kept one token under user_token; it becomes slot 1.
         if (string.IsNullOrWhiteSpace(tokens[0])) tokens[0] = _host.Settings.Get(LegacyTokenKey, string.Empty);
 
-        var set = new WorkspaceSet(tokens, _host.Logger, HandlerFactory);
+        var set = new WorkspaceSet(tokens, _host.Logger, HandlerFactory, Workspaces);
         set.Changed += RefreshAccountKeys;
         return set;
     }
@@ -145,6 +149,29 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
     }
 
     // ---- IPluginSettingsPage ----
+    //
+    // The host rebuilds the page from SettingsSchema and SettingsActions after every action, so
+    // the workspace cards and the Add / Remove buttons below follow the tokens as they change.
+
+    private const string SetupSteps =
+        "Each workspace needs its own copy of a small Slack app. For each one:\n" +
+        "1. Press \"Copy app manifest\", then \"Manage Slack apps\".\n" +
+        "2. In Slack: Create New App → From a manifest → Continue → pick the workspace → Next.\n" +
+        "3. On the JSON tab, replace the text with the manifest (paste) → Next → Create.\n" +
+        "4. In the app's sidebar: Install App → Install to the workspace → Allow.\n" +
+        "5. Copy the User OAuth Token (xoxp-…) into the field below, press Save, then \"Test tokens\".";
+
+    private string Token(int slot) => _host.Settings.Get(TokenKeyPrefix + slot, string.Empty)?.Trim() ?? string.Empty;
+
+    /// <summary>Workspace cards on the page: every filled slot, plus empty ones the user added, at least one.</summary>
+    private int Rows
+    {
+        get
+        {
+            var lastFilled = Enumerable.Range(1, WorkspaceSet.Slots).LastOrDefault(i => Token(i).Length > 0);
+            return Math.Clamp(Math.Max(lastFilled, _host.Settings.Get(RowsKey, 1)), 1, WorkspaceSet.Slots);
+        }
+    }
 
     public IReadOnlyList<PluginSettingDescriptor> SettingsSchema =>
     [
@@ -163,79 +190,123 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
             DefaultValue = true,
             Description = "Off: shortcuts go to whichever app has focus, so they only work while Slack is in front."
         },
-        new PluginSettingDescriptor
-        {
-            Key = "account",
-            Label = "Workspaces: status, notifications and away",
-            Kind = PluginSettingKind.Heading,
-            Description = "These keys need one token per Slack workspace, from a small Slack app of your own in that workspace. Repeat for each workspace: " +
-                          "1. Press \"Copy app manifest and open Slack\". " +
-                          "2. In Slack, press Create New App, choose From a manifest, Continue, and pick the workspace. " +
-                          "3. On the JSON tab, delete what is there and paste (Cmd+V / Ctrl+V), then Next and Create. " +
-                          "4. Open Install App in the app's sidebar, press Install to the workspace, then Allow. " +
-                          "5. Copy the User OAuth Token (starts xoxp-) into the next free slot below and Save. " +
-                          "Then press \"Test tokens\" to see which workspace each slot is."
-        },
-        .. Enumerable.Range(1, WorkspaceSet.Slots).Select(TokenSetting),
+        .. Enumerable.Range(1, Rows).SelectMany(WorkspaceCard),
         new PluginSettingDescriptor
         {
             Key = "about",
             Label = "About and support",
             Kind = PluginSettingKind.Heading,
-            Description = "Made by web-engineer. Not affiliated with or endorsed by Slack Technologies. For help, our public Slack and our tracker are on the contact page."
+            Description = "Made by web-engineer. Not affiliated with or endorsed by Slack Technologies."
         }
     ];
 
-    private PluginSettingDescriptor TokenSetting(int slot)
+    /// <summary>One card per workspace: its name and details as the heading, its token as the only field.</summary>
+    private IEnumerable<PluginSettingDescriptor> WorkspaceCard(int slot)
     {
-        var known = Workspaces?.All.FirstOrDefault(w => w.Slot == slot)?.Identity;
-        return new PluginSettingDescriptor
+        var token = Token(slot);
+        var w = Workspaces.All.FirstOrDefault(x => x.Slot == slot);
+        string title, description;
+        if (token.Length == 0)
+        {
+            title = slot == 1 && !Workspaces.Any ? "Connect a Slack workspace" : "New workspace";
+            description = SetupSteps;
+        }
+        else if (w?.Identity is { } id)
+        {
+            title = id.Team;
+            var domain = id.Domain.Length > 0 ? $"{id.Domain}.slack.com · " : string.Empty;
+            var missing = SlackApi.Scopes.Where(sc => !id.Scopes.Contains(sc)).ToList();
+            description = $"{domain}{id.TeamId} · signed in as {id.User} · workspace {slot}" +
+                          (missing.Count > 0 ? $"\nMissing scopes: {string.Join(", ", missing)}. Add them under OAuth & Permissions and reinstall the app." : string.Empty);
+        }
+        else if (w?.Error is { } error)
+        {
+            title = $"Workspace {slot}: token not working";
+            description = error is "invalid_auth" or "not_authed" or "token_revoked"
+                ? $"Slack rejected this token ({error}). Copy the User OAuth Token again from the app's OAuth & Permissions page."
+                : $"Slack said: {error}. Press \"Test tokens\" to try again.";
+        }
+        else
+        {
+            title = $"Workspace {slot}";
+            description = "Press \"Test tokens\" to check this token and show the workspace's name.";
+        }
+
+        yield return new PluginSettingDescriptor { Key = $"workspace_{slot}", Label = title, Kind = PluginSettingKind.Heading, Description = description };
+        yield return new PluginSettingDescriptor
         {
             Key = TokenKeyPrefix + slot,
-            Label = known is null ? $"Workspace {slot} token" : $"Workspace {slot} token ({known.Team})",
+            Label = "User OAuth token",
             Kind = PluginSettingKind.Password,
-            DefaultValue = string.Empty,
-            Description = slot == 1
-                ? "User OAuth Token, starts with xoxp-. Keys refer to a workspace by its name, subdomain (acme), team id (T…) or slot number."
-                : string.Empty
+            DefaultValue = string.Empty
         };
     }
 
-    public IReadOnlyList<PluginSettingAction> SettingsActions =>
-    [
-        new PluginSettingAction { Label = "Copy app manifest and open Slack", Invoke = CopyManifestAsync },
-        new PluginSettingAction { Label = "Test tokens", Invoke = TestTokensAsync },
-        new PluginSettingAction { Label = "Get support", Invoke = () => OpenLink(SupportUrl, SupportUrl) },
-        new PluginSettingAction { Label = "Report a bug or request a feature", Invoke = () => OpenLink(IssuesUrl, IssuesUrl) }
-    ];
+    public IReadOnlyList<PluginSettingAction> SettingsActions
+    {
+        get
+        {
+            var actions = new List<PluginSettingAction>
+            {
+                new() { Label = "Copy app manifest", Invoke = CopyManifestAsync },
+                new() { Label = "Manage Slack apps", Invoke = () => OpenLink(SlackApi.AppsUrl, "Slack's app page") },
+                new() { Label = "Test tokens", Invoke = TestTokensAsync }
+            };
+
+            var rows = Rows;
+            var hasEmpty = Enumerable.Range(1, rows).Any(i => Token(i).Length == 0);
+            if (!hasEmpty && rows < WorkspaceSet.Slots)
+                actions.Add(new PluginSettingAction { Label = "+ Add workspace", Invoke = AddWorkspaceAsync });
+
+            foreach (var slot in Enumerable.Range(1, rows).Where(i => Token(i).Length > 0))
+            {
+                var name = Workspaces.All.FirstOrDefault(x => x.Slot == slot)?.Identity?.Team ?? $"workspace {slot}";
+                actions.Add(new PluginSettingAction { Label = $"× Remove {name}", Invoke = () => RemoveWorkspaceAsync(slot) });
+            }
+
+            actions.Add(new PluginSettingAction { Label = "Get support", Invoke = () => OpenLink(SupportUrl, SupportUrl) });
+            actions.Add(new PluginSettingAction { Label = "Report a bug or request a feature", Invoke = () => OpenLink(IssuesUrl, IssuesUrl) });
+            return actions;
+        }
+    }
 
     private Task<string> OpenLink(string url, string name) =>
         Task.FromResult(_host.OpenBrowser(url) ? $"Opened {name}" : $"Could not open a browser; visit {url}");
 
-    /// <summary>
-    /// Puts the app manifest on the clipboard and opens Slack's app list, where the user picks
-    /// Create New App → From a manifest and pastes it. (Slack's documented pre-filled
-    /// <c>?new_app=1&amp;manifest_json=</c> link opens the plain Create new app dialog without the
-    /// manifest, so it is not used.)
-    /// </summary>
     private Task<string> CopyManifestAsync()
     {
-        var file = Path.Combine(Path.GetDirectoryName(typeof(SlackPlugin).Assembly.Location) ?? ".", "slack-app-manifest.json");
-        var copied = Clipboard.SetText(SlackApi.Manifest());
-        var opened = _host.OpenBrowser(SlackApi.AppsUrl);
+        if (Clipboard.SetText(SlackApi.Manifest()))
+            return Task.FromResult("Manifest copied. Paste it on the JSON tab after choosing From a manifest.");
 
-        var first = copied
-            ? "Manifest copied to the clipboard."
-            : $"Could not reach the clipboard; copy the manifest from {file}.";
-        var where = opened ? "Slack's app page is open" : $"Open {SlackApi.AppsUrl}";
-        return Task.FromResult($"{first} {where}: press Create New App, choose From a manifest, Continue, pick the workspace, " +
-                               "then paste over everything on the JSON tab and press Next, then Create. Repeat for each workspace.");
+        var file = Path.Combine(Path.GetDirectoryName(typeof(SlackPlugin).Assembly.Location) ?? ".", "slack-app-manifest.json");
+        return Task.FromResult($"Could not reach the clipboard; copy the manifest from {file}.");
+    }
+
+    private Task<string> AddWorkspaceAsync()
+    {
+        _host.Settings.Set(RowsKey, Math.Min(Rows + 1, WorkspaceSet.Slots));
+        _host.Settings.Save();
+        return Task.FromResult("Added an empty workspace card. Follow its steps, paste the token, then Save.");
+    }
+
+    /// <summary>Drops one workspace and closes the gap, so the remaining cards stay in order.</summary>
+    private Task<string> RemoveWorkspaceAsync(int slot)
+    {
+        var name = Workspaces.All.FirstOrDefault(x => x.Slot == slot)?.Name ?? $"workspace {slot}";
+        var kept = Enumerable.Range(1, WorkspaceSet.Slots).Where(i => i != slot).Select(Token).Where(t => t.Length > 0).ToList();
+        for (var i = 1; i <= WorkspaceSet.Slots; i++)
+            _host.Settings.Set(TokenKeyPrefix + i, i <= kept.Count ? kept[i - 1] : string.Empty);
+        _host.Settings.Remove(LegacyTokenKey);
+        _host.Settings.Set(RowsKey, Math.Max(1, kept.Count));
+        _host.Settings.Save();
+        OnSettingsSaved();
+        return Task.FromResult($"Removed {name}. The Slack app itself stays in that workspace; delete it under Manage Slack apps if you no longer want it.");
     }
 
     public void OnSettingsSaved()
     {
-        // Stop the old poller, then swap in a set built from the new tokens; the poller restarts
-        // from the next key render.
+        // Stop the old poller, then swap in a set built from the new tokens (keeping the names
+        // already learnt); the poller restarts from the next key render.
         WorkspaceGate.Reset();
         var old = Workspaces;
         Workspaces = CreateWorkspaces();
@@ -250,13 +321,13 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
     private async Task<string> TestTokensAsync()
     {
         if (!Workspaces.Any)
-            return "No tokens set. Follow the steps above, starting with \"Copy app manifest and open Slack\", then paste the User OAuth Token and Save.";
+            return "No tokens yet. Follow the steps in the workspace card, paste the User OAuth Token, then Save.";
 
         var lines = await Task.WhenAll(Workspaces.All.Select(DescribeAsync)).ConfigureAwait(false);
         var duplicates = Workspaces.All.Where(w => w.Identity is not null).GroupBy(w => w.Identity!.TeamId).Where(g => g.Count() > 1)
-            .Select(g => $"Slots {string.Join(" and ", g.Select(w => w.Slot))} are the same workspace ({g.First().Name}).");
+            .Select(g => $"{g.First().Name} is connected twice; remove one.");
         _host.RequestButtonRefresh(WorkspaceCommand.Name);
-        return string.Join(" ", lines.Concat(duplicates));
+        return string.Join("\n", lines.Concat(duplicates));
     }
 
     private static async Task<string> DescribeAsync(Workspace w)
@@ -267,20 +338,18 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
             w.Identity = id;
             w.Error = null;
             var missing = SlackApi.Scopes.Where(s => !id.Scopes.Contains(s)).ToList();
-            var scopes = missing.Count == 0 ? "all scopes" : $"missing {string.Join(", ", missing)}; add them under OAuth & Permissions and reinstall";
-            var domain = id.Domain.Length > 0 ? $"{id.Domain}, " : string.Empty;
-            return $"Slot {w.Slot}: {id.Team} ({domain}{id.TeamId}) as {id.User}, {scopes}.";
+            return missing.Count == 0
+                ? $"{id.Team}: working, signed in as {id.User}."
+                : $"{id.Team}: missing {string.Join(", ", missing)}.";
         }
         catch (SlackApiException ex)
         {
             w.Error = ex.Error;
-            return ex.Error is "invalid_auth" or "not_authed" or "token_revoked"
-                ? $"Slot {w.Slot}: Slack rejected the token ({ex.Error}); copy the User OAuth Token again."
-                : $"Slot {w.Slot}: Slack said {ex.Error}.";
+            return $"Workspace {w.Slot}: {(ex.Error is "invalid_auth" or "not_authed" or "token_revoked" ? "Slack rejected the token" : "Slack said " + ex.Error)}.";
         }
         catch (HttpRequestException ex)
         {
-            return $"Slot {w.Slot}: could not reach Slack ({ex.Message}).";
+            return $"Workspace {w.Slot}: could not reach Slack ({ex.Message}).";
         }
     }
 

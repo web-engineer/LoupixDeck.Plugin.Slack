@@ -53,13 +53,14 @@ The status, pause-notifications and away keys use the Slack Web API with a
 user token for each workspace. You make each token yourself, with a small
 Slack app that only you use. A Slack app lives in one workspace, so if you use
 several workspaces, create the same app once in each. That is one manifest and
-up to 8 workspaces.
+up to 10 workspaces.
 
 Each workspace takes about two minutes. Your browser must be signed in to the workspace.
 
-1. **Copy the manifest.** Open LoupixDeck → Plugins → Slack → Settings and press
-   **Copy app manifest and open Slack**. This puts the app's manifest on your
-   clipboard and opens [api.slack.com/apps](https://api.slack.com/apps).
+1. **Copy the manifest and open Slack.** Open LoupixDeck → Plugins → Slack →
+   Settings. Press **Copy app manifest**, which puts the manifest on your
+   clipboard. Then press **Manage Slack apps**, which opens
+   [api.slack.com/apps](https://api.slack.com/apps).
    The manifest is also in the plugin folder as `slack-app-manifest.json`,
    and in this repository: [slack-app-manifest.json](slack-app-manifest.json).
 2. **Start a new app from the manifest.** On Slack's app page, press
@@ -78,13 +79,20 @@ Each workspace takes about two minutes. Your browser must be signed in to the wo
    admin to approve the app first. Slack then tells you it has asked them.
 7. **Copy the token.** After installing, Slack shows a **User OAuth Token**
    starting with `xoxp-`. It is also on the app's **OAuth & Permissions** page.
-   Paste it into the next free *Workspace N token* field and press **Save**.
+   Paste it into the *User OAuth token* field of the empty workspace card
+   (*Connect a Slack workspace* the first time, *New workspace* after that)
+   and press **Save**.
    Ignore any *Bot User OAuth Token* (`xoxb-`). This app has no bot, so there
    should not be one.
-8. **Check it.** Press **Test tokens**. For each slot it reports the workspace,
-   its subdomain and id, who you are signed in as, and any missing scopes.
-   After that, the slot's label shows the workspace name.
-9. **Repeat steps 1–8 for each other workspace**, using a new slot each time.
+8. **Check it.** Press **Test tokens**. The card is then titled with the
+   workspace's name, with its address, team id and the account you are signed
+   in as. A card whose token does not work says so.
+9. **Add the next workspace.** Press **+ Add workspace** for a new empty card
+   and repeat steps 2–8. Copy the manifest again only if your clipboard has
+   changed since.
+
+Slack's *Your Apps* list shows one *LoupixDeck* app per workspace, each with
+its *Workspace* column. That is expected: they are separate copies of the same app.
 
 The manifest asks only for user scopes (below). The app has no bot, receives
 no events and is never published.
@@ -107,12 +115,15 @@ When no account key is shown it makes no calls.
 | Setting | Key | Default | Notes |
 |---|---|---|---|
 | Bring Slack to the front first | `bring_to_front` | on | Off: shortcuts go to whichever app has focus |
-| Workspace 1 token … Workspace 8 token | `token_1` … `token_8` | empty | One `xoxp-…` User OAuth Token per workspace, see above. Gaps are fine |
+| User OAuth token, one card per workspace | `token_1` … `token_10` | empty | One `xoxp-…` token per workspace, see above. The card's title is the workspace's name |
 
 Buttons on the settings page:
 
-- **Copy app manifest and open Slack**: puts the manifest on the clipboard and opens Slack's app page; see [Connecting your Slack account](#connecting-your-slack-account).
-- **Test tokens**: for each slot, reports the workspace, who you are and any missing scopes. It also flags two slots with the same workspace.
+- **Copy app manifest**: puts the manifest on the clipboard.
+- **Manage Slack apps**: opens [api.slack.com/apps](https://api.slack.com/apps), where you create, install and delete the apps.
+- **Test tokens**: checks every token and lists each workspace with who you are signed in as. It also says when a workspace is connected twice.
+- **+ Add workspace**: adds an empty workspace card, up to 10. It appears only when no card is empty.
+- **× Remove *workspace***: forgets that workspace's token. The cards below move up. The Slack app stays in the workspace; delete it under *Manage Slack apps* if you no longer want it.
 - **Get support**: opens [web-engineer.co.uk/contact](https://web-engineer.co.uk/contact).
 - **Report a bug or request a feature**: opens this repository's issues.
 
@@ -202,8 +213,10 @@ Every key here takes a last `Workspace` parameter that says where it acts:
 | `acme` or `acme.slack.com` | the workspace with that subdomain |
 | `Acme Inc` | the workspace with that name (any case) |
 | `T0123ABCD` | the workspace with that team id |
-| `2` | the workspace in token slot 2 |
+| `2` | the second workspace card on the settings page |
 | `acme;2` | several, separated by `;` (a comma would split the parameter) |
+
+Prefer names or subdomains: card numbers shift when you remove a workspace above.
 
 | Command id | Parameters | What it does |
 |---|---|---|
@@ -222,7 +235,7 @@ has each workspace's error. Without any token these keys show `Set token`; a
 
 `Slack.Workspace(Workspace)` switches the Slack desktop app to one workspace.
 `Workspace` takes the same forms as above, except a list. A team id (`T…`)
-works without a token; a name, subdomain or slot needs that workspace's token.
+works without a token; a name, subdomain or card number needs that workspace's token.
 The key shows the workspace's name.
 
 ### Unread badge
@@ -253,7 +266,7 @@ of these as `Conversation`:
   page takes you to the app;
 - `https://app.slack.com/client/T…/C…` or `T0123ABCD/C0123ABCD`;
 - a bare channel, DM or user id, such as `C0123ABCD`, with `Workspace` set
-  (name, subdomain, slot or team id). With a single workspace connected,
+  (name, subdomain, card number or team id). With a single workspace connected,
   `Workspace` can stay empty.
 
 To get a conversation's link, right-click it in Slack and choose Copy → Copy link.
