@@ -309,6 +309,12 @@ A post-build step copies the plugin into the host's plugin folder:
 Pass `-p:LoupixSkipInstall=true` to build without copying. Stop LoupixDeck
 before rebuilding; the host holds the DLL open.
 
-## Licence
+## Licence and credits
 
-MIT. See [LICENSE](LICENSE).
+MIT licensed: see [LICENSE](LICENSE). Copyright (c) 2026 Web-Engine Limited,
+trading as [web-engineer](https://www.web-engineer.co.uk/).
+
+Built on [LoupixDeck](https://github.com/RadiatorTwo/LoupixDeck) and its
+[Plugin SDK](https://github.com/RadiatorTwo/LoupixDeck.PluginSdk) by RadiatorTwo,
+both MIT licensed. The SDK is not redistributed with this plugin; LoupixDeck
+supplies it at runtime.
