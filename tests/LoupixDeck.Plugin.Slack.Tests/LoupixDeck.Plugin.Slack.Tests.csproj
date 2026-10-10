@@ -20,4 +20,8 @@
     <ProjectReference Include="../../LoupixDeck.Plugin.Slack.csproj" AdditionalProperties="LoupixSkipInstall=true" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="../../slack-app-manifest.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

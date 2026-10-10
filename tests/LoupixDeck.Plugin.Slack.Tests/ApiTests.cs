@@ -138,6 +138,12 @@ public sealed class ApiTests
         var scopes = manifest["oauth_config"]!["scopes"]!;
         Assert.Null(scopes["bot"]);
         Assert.Equal(SlackApi.Scopes, scopes["user"]!.AsArray().Select(s => (string)s!).ToArray());
-        Assert.StartsWith("https://api.slack.com/apps?new_app=1&manifest_json=", SlackApi.CreateAppUrl());
+    }
+
+    [Fact]
+    public void Shipped_manifest_file_matches_the_code()
+    {
+        var file = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "slack-app-manifest.json"));
+        Assert.Equal(SlackApi.Manifest().ReplaceLineEndings(), file.Trim().ReplaceLineEndings());
     }
 }

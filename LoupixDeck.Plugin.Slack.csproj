@@ -33,6 +33,8 @@
   <ItemGroup>
     <None Include="plugin.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="icon.png" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Pasted into Slack when the user creates their own Slack app (see README). -->
+    <None Include="slack-app-manifest.json" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="icon.png" LogicalName="LoupixDeck.Plugin.Slack.icon.png" />
   </ItemGroup>
 

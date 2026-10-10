@@ -165,7 +165,9 @@ internal sealed class SlackApi : IDisposable
 
     /// <summary>
     /// The app manifest for the user's own single-workspace Slack app: user scopes only, no bot,
-    /// no events, nothing distributed. Slack's "create from manifest" link pre-fills it.
+    /// no events, nothing distributed. The user pastes it into Slack's Create new app → From a
+    /// manifest → JSON tab. The repository's slack-app-manifest.json is the same text (a test
+    /// keeps them equal).
     /// </summary>
     public static string Manifest() => new JsonObject
     {
@@ -185,10 +187,10 @@ internal sealed class SlackApi : IDisposable
             ["socket_mode_enabled"] = false,
             ["token_rotation_enabled"] = false
         }
-    }.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
+    }.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
 
-    public static string CreateAppUrl() =>
-        "https://api.slack.com/apps?new_app=1&manifest_json=" + Uri.EscapeDataString(Manifest());
+    /// <summary>Slack's list of your apps, where "Create New App" starts the manifest flow.</summary>
+    public const string AppsUrl = "https://api.slack.com/apps";
 
     public void Dispose() => _http.Dispose();
 }

@@ -49,26 +49,37 @@ need a token; see the next section.
 
 The status, pause-notifications and away keys use the Slack Web API with a
 user token. You make the token yourself, with a small Slack app that only
-you use. It has no bot, receives no events and is never published.
+you use.
 
-1. Open LoupixDeck → Plugins → Slack → Settings and press **Create the Slack app**.
-   Slack opens with the app's manifest already filled in. Pick your workspace and create the app.
-2. On the app's **Install App** page, press **Install to Workspace** and allow it.
-   Some workspaces need an admin to approve the app first.
-3. Copy the **User OAuth Token** (`xoxp-…`) into the plugin's *User OAuth token* field and save.
-4. Press **Test token**. It reports who you are signed in as and any missing scopes.
-   It also fills in *Workspace id*.
+You need about two minutes and a browser signed in to your Slack workspace.
 
-If the link in step 1 does not work, create an app from a manifest at
-[api.slack.com/apps](https://api.slack.com/apps) and paste this:
+1. **Copy the manifest.** Open LoupixDeck → Plugins → Slack → Settings and press
+   **Copy app manifest and open Slack**. This puts the app's manifest on your
+   clipboard and opens [api.slack.com/apps](https://api.slack.com/apps).
+   The manifest is also in the plugin folder as `slack-app-manifest.json`,
+   and in this repository: [slack-app-manifest.json](slack-app-manifest.json).
+2. **Start a new app from the manifest.** On Slack's app page, press
+   **Create New App**. In the *Create new app* dialog, under *Or start your own
+   way*, choose **From a manifest** and press **Continue**. Do not pick *AI
+   agent*, *Starter app* or *Blank app*.
+3. **Pick your workspace** from the list and press **Next**.
+4. **Paste the manifest.** Select the **JSON** tab, delete the example text,
+   paste (Cmd+V or Ctrl+V) and press **Next**.
+5. **Create it.** Slack shows a summary with six *User* scopes and no bot
+   scopes. Press **Create**.
+6. **Install it.** In the app's left sidebar, open **Install App**, press
+   **Install to *your workspace*** and then **Allow**. Some workspaces need an
+   admin to approve the app first. Slack then tells you it has asked them.
+7. **Copy the token.** After installing, Slack shows a **User OAuth Token**
+   starting with `xoxp-`. It is also on the app's **OAuth & Permissions** page.
+   Paste it into the plugin's *User OAuth token* field and press **Save**.
+   Ignore any *Bot User OAuth Token* (`xoxb-`). This app has no bot, so there
+   should not be one.
+8. **Check it.** Press **Test token**. It reports who you are signed in as and
+   any missing scopes, and fills in *Workspace id*.
 
-```json
-{
-  "display_information": { "name": "LoupixDeck", "description": "Status, Do Not Disturb and away keys for my LoupixDeck control surface.", "background_color": "#4a154b" },
-  "oauth_config": { "scopes": { "user": ["users.profile:read", "users.profile:write", "dnd:read", "dnd:write", "users:read", "users:write"] } },
-  "settings": { "org_deploy_enabled": false, "socket_mode_enabled": false, "token_rotation_enabled": false }
-}
-```
+The manifest asks only for user scopes (below). The app has no bot, receives
+no events and is never published.
 
 | Scope | Used for |
 |---|---|
@@ -92,7 +103,7 @@ When no account key is shown it makes no calls.
 
 Buttons on the settings page:
 
-- **Create the Slack app**: opens Slack with the app manifest filled in.
+- **Copy app manifest and open Slack**: puts the manifest on the clipboard and opens Slack's app page; see [Connecting your Slack account](#connecting-your-slack-account).
 - **Test token**: runs `auth.test` and reports who you are and any missing scopes.
 - **Get support**: opens [web-engineer.co.uk/contact](https://web-engineer.co.uk/contact).
 - **Report a bug or request a feature**: opens this repository's issues.

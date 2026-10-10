@@ -159,8 +159,13 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
             Key = "account",
             Label = "Status, notifications and away",
             Kind = PluginSettingKind.Heading,
-            Description = "These keys talk to Slack with a token from your own Slack app. Press \"Create the Slack app\", install it to your workspace, " +
-                          "then copy the User OAuth Token (xoxp-…) from OAuth & Permissions into the field below. The keys ask Slack once a minute, only while one is on screen."
+            Description = "These keys need a token from a small Slack app of your own. " +
+                          "1. Press \"Copy app manifest and open Slack\". " +
+                          "2. In Slack, press Create New App, choose From a manifest, Continue, and pick your workspace. " +
+                          "3. On the JSON tab, delete what is there and paste (Cmd+V / Ctrl+V), then Next and Create. " +
+                          "4. Open Install App in the app's sidebar, press Install to your workspace, then Allow. " +
+                          "5. Copy the User OAuth Token (starts xoxp-) into the field below, Save, and press \"Test token\". " +
+                          "The keys ask Slack once a minute, only while one is on screen."
         },
         new PluginSettingDescriptor
         {
@@ -189,7 +194,7 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
 
     public IReadOnlyList<PluginSettingAction> SettingsActions =>
     [
-        new PluginSettingAction { Label = "Create the Slack app", Invoke = () => OpenLink(SlackApi.CreateAppUrl(), "Slack's app page") },
+        new PluginSettingAction { Label = "Copy app manifest and open Slack", Invoke = CopyManifestAsync },
         new PluginSettingAction { Label = "Test token", Invoke = TestTokenAsync },
         new PluginSettingAction { Label = "Get support", Invoke = () => OpenLink(SupportUrl, SupportUrl) },
         new PluginSettingAction { Label = "Report a bug or request a feature", Invoke = () => OpenLink(IssuesUrl, IssuesUrl) }
@@ -197,6 +202,26 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
 
     private Task<string> OpenLink(string url, string name) =>
         Task.FromResult(_host.OpenBrowser(url) ? $"Opened {name}" : $"Could not open a browser; visit {url}");
+
+    /// <summary>
+    /// Puts the app manifest on the clipboard and opens Slack's app list, where the user picks
+    /// Create New App → From a manifest and pastes it. (Slack's documented pre-filled
+    /// <c>?new_app=1&amp;manifest_json=</c> link opens the plain Create new app dialog without the
+    /// manifest, so it is not used.)
+    /// </summary>
+    private Task<string> CopyManifestAsync()
+    {
+        var file = Path.Combine(Path.GetDirectoryName(typeof(SlackPlugin).Assembly.Location) ?? ".", "slack-app-manifest.json");
+        var copied = Clipboard.SetText(SlackApi.Manifest());
+        var opened = _host.OpenBrowser(SlackApi.AppsUrl);
+
+        var first = copied
+            ? "Manifest copied to the clipboard."
+            : $"Could not reach the clipboard; copy the manifest from {file}.";
+        var where = opened ? "Slack's app page is open" : $"Open {SlackApi.AppsUrl}";
+        return Task.FromResult($"{first} {where}: press Create New App, choose From a manifest, Continue, pick your workspace, " +
+                               "then paste over everything on the JSON tab and press Next, then Create.");
+    }
 
     public void OnSettingsSaved()
     {
@@ -208,7 +233,7 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
 
     private async Task<string> TestTokenAsync()
     {
-        if (!Api.HasToken) return "No token set. Press \"Create the Slack app\" first, then paste its User OAuth Token.";
+        if (!Api.HasToken) return "No token set. Follow the steps above, starting with \"Copy app manifest and open Slack\", then paste the User OAuth Token and Save.";
 
         Identity id;
         try
