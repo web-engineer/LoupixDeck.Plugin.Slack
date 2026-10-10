@@ -1,0 +1,12 @@
+{
+  "id": "slack",
+  "name": "Slack",
+  "version": "0.1.0",
+  "sdkVersion": "1.30.0",
+  "entryAssembly": "LoupixDeck.Plugin.Slack.dll",
+  "platform": "All",
+  "author": "web-engineer",
+  "description": "Slack from the deck: shortcut keys and dials, an unread badge, huddle keys, and status, Do Not Disturb and away keys.",
+  "projectUrl": "https://github.com/web-engineer/LoupixDeck.Plugin.Slack",
+  "iconFile": "icon.png"
+}
