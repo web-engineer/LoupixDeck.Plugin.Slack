@@ -28,10 +28,10 @@ internal sealed class UnreadCommand(SlackPlugin plugin) : SlackCommandBase(plugi
         [
             new ButtonStateDescriptor
             {
-                Name = MentionsState, Description = "Mentions or DMs are waiting",
-                Layout = SlackKey.State(SlackKey.RedHex,
-                    SlackKey.Icon("Bell", "\U000F009E", 0.36, -16), // mdi-bell-ring
-                    SlackKey.ValueText("Count", ButtonTextSource.Value, 22, 16))
+                Name = ClearState, Description = "Nothing new, or the badge cannot be read",
+                Layout = SlackKey.State(SlackKey.AubergineHex,
+                    SlackKey.Icon("Check", "\U000F012C", 0.4, -9), // mdi-check
+                    SlackKey.ValueText("Status", ButtonTextSource.Value, 13, 26))
             },
             new ButtonStateDescriptor
             {
@@ -42,10 +42,10 @@ internal sealed class UnreadCommand(SlackPlugin plugin) : SlackCommandBase(plugi
             },
             new ButtonStateDescriptor
             {
-                Name = ClearState, Description = "Nothing new, or the badge cannot be read",
-                Layout = SlackKey.State(SlackKey.AubergineHex,
-                    SlackKey.Icon("Check", "\U000F012C", 0.4, -9), // mdi-check
-                    SlackKey.ValueText("Status", ButtonTextSource.Value, 13, 26))
+                Name = MentionsState, Description = "Mentions or DMs are waiting",
+                Layout = SlackKey.State(SlackKey.RedHex,
+                    SlackKey.Icon("Bell", "\U000F009E", 0.36, -16), // mdi-bell-ring
+                    SlackKey.ValueText("Count", ButtonTextSource.Value, 22, 16))
             }
         ],
         ButtonLayout = new ButtonLayoutDescriptor { Mode = ButtonLayoutMode.None }

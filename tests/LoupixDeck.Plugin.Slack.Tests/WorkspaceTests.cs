@@ -250,4 +250,58 @@ public sealed class WorkspaceTests
         Assert.DoesNotContain("+ Add workspace", Buttons(plugin));
         plugin.Shutdown();
     }
+
+    [Fact]
+    public async Task Fresh_start_fills_the_keys_without_a_page_change()
+    {
+        var host = new FakeHost();
+        host.Values["token_1"] = "xoxp-acme";
+        host.Values["token_2"] = "xoxp-beta";
+        var plugin = new SlackPlugin { HandlerFactory = t => t == "xoxp-acme" ? _acme : _beta };
+        plugin.Initialize(host);
+        var status = (IValueDisplayCommand)Command(plugin, "Slack.Status");
+        string[] lunch = ["Lunch", ":taco:", "0"];
+
+        // First render, before Slack has answered.
+        var first = status.GetValue(Ctx(host, lunch));
+
+        // The plugin must push a refresh by itself once the poll lands.
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline && status.GetValue(Ctx(host, lunch))?.Text != "Lunch") await Task.Delay(50);
+        var later = status.GetValue(Ctx(host, lunch));
+        lock (host.Refreshed)
+            Assert.True(host.Refreshed.Contains("Slack.Status"), $"first={first?.Text} later={later?.Text} refreshed=[{string.Join(",", host.Refreshed)}]");
+        Assert.Equal("Lunch", later?.Text);
+        plugin.Shutdown();
+    }
+
+    [Fact]
+    public async Task Start_up_reads_every_workspace_before_any_key_asks()
+    {
+        var host = new FakeHost();
+        host.Values["token_1"] = "xoxp-acme";
+        host.Values["token_2"] = "xoxp-beta";
+        _acme.Text = "Lunch"; _acme.Emoji = ":taco:";
+        var plugin = new SlackPlugin { HandlerFactory = t => t == "xoxp-acme" ? _acme : _beta };
+        plugin.Initialize(host);
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline && plugin.Workspaces.All.Any(w => w.Self is null)) await Task.Delay(20);
+
+        Assert.All(plugin.Workspaces.All, w => Assert.NotNull(w.Self));
+        // So the very first render already has the answer.
+        var first = ((IValueDisplayCommand)Command(plugin, "Slack.Status")).GetValue(Ctx(host, "Lunch", ":taco:", "0"))!.Value;
+        Assert.Equal(0.5, first.Normalized);
+        plugin.Shutdown();
+    }
+
+    [Fact]
+    public void Stateful_keys_start_in_their_neutral_state()
+    {
+        var plugin = new SlackPlugin();
+        string First(string name) => Command(plugin, name).Descriptor.States[0].Name;
+        Assert.Equal("clear", First("Slack.Unread"));
+        Assert.Equal("notifying", First("Slack.Focus"));
+        Assert.Equal("active", First("Slack.Away"));
+    }
 }

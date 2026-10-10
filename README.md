@@ -152,7 +152,9 @@ only to `slack.com`. While an account key is on screen, the plugin asks each
 workspace for your status, Do Not Disturb and presence once a minute: three
 calls per workspace, well inside Slack's rate limits, which apply to each
 workspace separately. It also asks right after a key changes something.
-When no account key is shown it makes no calls.
+It also reads them once when LoupixDeck starts and after you save the
+settings, so the keys have something to show the first time they appear.
+Otherwise, when no account key is shown, it makes no calls.
 
 ## Settings
 
@@ -266,8 +268,8 @@ Prefer names or subdomains: card numbers shift when you remove a workspace above
 |---|---|---|
 | `Slack.Status` | `Text`, `Emoji`, `Minutes`, `Workspace` (e.g. `In a meeting`, `:calendar:`, `60`, `all`) | Sets that status in the chosen workspaces. Tap again once all of them have it and it is cleared in all of them. `Minutes` 0 keeps it until cleared. A green ring round the key fills with the share of workspaces that have this status. The key shows `3/6` when only some have it, otherwise the time left |
 | `Slack.ClearStatus` | `Workspace` | Clears your status. The key shows your current status, `Mixed` when the workspaces differ, and `2/6` when only some have one |
-| `Slack.Focus` | `Minutes` (default 60), `Workspace` | Pauses notifications (Do Not Disturb) for that long; tap again to resume them wherever they are paused. States: `paused` (yellow, the soonest time left and `2/6` when only some are paused), `scheduled` (all inside their Do Not Disturb schedule), `notifying` |
-| `Slack.Away` | `Workspace` | Sets you away; tap again for automatic, wherever you are away. States: `away` (with `2/6` when only some), `active` |
+| `Slack.Focus` | `Minutes` (default 60), `Workspace` | Pauses notifications (Do Not Disturb) for that long; tap again to resume them wherever they are paused. States: `notifying` (the starting state), `paused` (yellow, the soonest time left and `2/6` when only some are paused), `scheduled` (all inside their Do Not Disturb schedule) |
+| `Slack.Away` | `Workspace` | Sets you away; tap again for automatic, wherever you are away. States: `active` (the starting state), `away` (with `2/6` when only some) |
 
 Changes go to every chosen workspace at once. If some fail, the key briefly
 shows `2/6 failed` and the others still change. If all fail, it shows why:
@@ -288,9 +290,9 @@ The key shows the workspace's name.
 
 | State | Meaning | Tap goes to |
 |---|---|---|
-| `mentions` | Red, with the count of mentions and DMs Slack shows on its icon | Activity |
+| `clear` | `All read`, or `Not running` / `No Slack`; the starting state | Brings Slack forward |
 | `unread` | A dot: unread messages, none of them for you | All unreads |
-| `clear` | `All read`, or `Not running` / `No Slack` | Brings Slack forward |
+| `mentions` | Red, with the count of mentions and DMs Slack shows on its icon | Activity |
 
 The plugin reads the badge every 2 seconds, only while the key is on screen.
 It is Slack's single app badge, so it covers all your workspaces together.

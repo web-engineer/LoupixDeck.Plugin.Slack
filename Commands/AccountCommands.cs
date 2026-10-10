@@ -277,6 +277,13 @@ internal sealed class FocusCommand(SlackPlugin plugin) : AccountCommandBase(plug
         [
             new ButtonStateDescriptor
             {
+                Name = OffState, Description = "Notifications are on",
+                Layout = SlackKey.State(SlackKey.AubergineHex,
+                    SlackKey.Icon("Icon", "\U000F009A", 0.4, -10), // mdi-bell
+                    SlackKey.ValueText("Status", ButtonTextSource.Value, 13, 26))
+            },
+            new ButtonStateDescriptor
+            {
                 Name = OnState, Description = "Notifications are paused",
                 Layout = SlackKey.State(SlackKey.YellowHex,
                     SlackKey.Icon("Icon", "\U000F009B", 0.4, -10, SlackKey.DarkHex), // mdi-bell-off
@@ -289,13 +296,6 @@ internal sealed class FocusCommand(SlackPlugin plugin) : AccountCommandBase(plug
                 Layout = SlackKey.State(SlackKey.AubergineHex,
                     SlackKey.Icon("Icon", "\U000F009B", 0.4, -10, SlackKey.YellowHex), // mdi-bell-off
                     SlackKey.Caption("Scheduled"))
-            },
-            new ButtonStateDescriptor
-            {
-                Name = OffState, Description = "Notifications are on",
-                Layout = SlackKey.State(SlackKey.AubergineHex,
-                    SlackKey.Icon("Icon", "\U000F009A", 0.4, -10), // mdi-bell
-                    SlackKey.ValueText("Status", ButtonTextSource.Value, 13, 26))
             }
         ],
         ButtonLayout = new ButtonLayoutDescriptor { Mode = ButtonLayoutMode.None }
@@ -374,18 +374,18 @@ internal sealed class AwayCommand(SlackPlugin plugin) : AccountCommandBase(plugi
         [
             new ButtonStateDescriptor
             {
+                Name = ActiveState, Description = "Slack shows you active when you are",
+                Layout = SlackKey.State(SlackKey.AubergineHex,
+                    SlackKey.Icon("Icon", "\U000F09DE", 0.4, -10, SlackKey.GreenHex), // mdi-circle-medium
+                    SlackKey.ValueText("Status", ButtonTextSource.Value, 13, 26))
+            },
+            new ButtonStateDescriptor
+            {
                 Name = AwayState, Description = "You are set to away",
                 Layout = SlackKey.State(SlackKey.DarkHex,
                     SlackKey.Icon("Icon", "\U000F0766", 0.3, -10, SlackKey.FadedHex), // mdi-circle-outline
                     SlackKey.Caption("Away"),
                     SlackKey.ValueText("Workspaces", ButtonTextSource.Detail, 9, 38, SlackKey.FadedHex))
-            },
-            new ButtonStateDescriptor
-            {
-                Name = ActiveState, Description = "Slack shows you active when you are",
-                Layout = SlackKey.State(SlackKey.AubergineHex,
-                    SlackKey.Icon("Icon", "\U000F09DE", 0.4, -10, SlackKey.GreenHex), // mdi-circle-medium
-                    SlackKey.ValueText("Status", ButtonTextSource.Value, 13, 26))
             }
         ],
         ButtonLayout = new ButtonLayoutDescriptor { Mode = ButtonLayoutMode.None }

@@ -72,8 +72,9 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
         // Through the property, so the gate drives whichever set is current after a settings save.
         WorkspaceGate = new DemandGate(() => Workspaces.Any, () => Workspaces.Start(), () => Workspaces.Stop(), WorkspaceIdle);
 
-        // Learn the workspace names now, so the settings page and the keys can show them.
-        if (Workspaces.Any) _ = Workspaces.IdentifyAsync();
+        // Read every workspace once now, so the settings page has names and the status keys have
+        // something to show the first time they appear; the poller keeps it fresh while they do.
+        if (Workspaces.Any) _ = Workspaces.RefreshAsync();
 
         host.Logger.Info((SlackApp.IsInstalled ? "Slack desktop app found" : "Slack desktop app not found; shortcut keys need it") +
                          $"; {Workspaces.All.Count} workspace token(s)");
@@ -315,7 +316,7 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
 
         Keys.Invalidate();
         RefreshAccountKeys();
-        _ = Workspaces.IdentifyAsync();
+        _ = Workspaces.RefreshAsync();
     }
 
     private async Task<string> TestTokensAsync()

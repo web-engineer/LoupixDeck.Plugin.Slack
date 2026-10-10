@@ -146,9 +146,18 @@ internal sealed class WorkspaceSet : IDisposable
     /// <summary>Re-reads the given workspaces (all of them by default). Safe to call while stopped.</summary>
     public async Task RefreshAsync(IEnumerable<Workspace>? only = null)
     {
+        var started = DateTime.UtcNow;
         var changed = await Task.WhenAll((only ?? All).Select(RefreshOneAsync)).ConfigureAwait(false);
+        if (!_firstReadLogged && All.Any(w => w.Self is not null))
+        {
+            _firstReadLogged = true;
+            _log.Info($"Slack status read for {All.Count(w => w.Self is not null)}/{All.Count} workspace(s) in {(DateTime.UtcNow - started).TotalMilliseconds:0} ms");
+        }
+
         if (changed.Any(c => c)) Changed?.Invoke();
     }
+
+    private bool _firstReadLogged;
 
     private async Task<bool> IdentifyOneAsync(Workspace w)
     {

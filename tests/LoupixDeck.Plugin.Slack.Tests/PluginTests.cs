@@ -17,7 +17,8 @@ internal sealed class FakeHost : IPluginHost, IPluginLogger, IPluginSettings
     public string Tr(string english) => english;
     public FolderGridInfo FolderGrid => new(5, 3, 0);
     public DeviceInfo? ActiveDevice => null;
-    public void RequestButtonRefresh(string commandName) { }
+    public readonly List<string> Refreshed = new();
+    public void RequestButtonRefresh(string commandName) { lock (Refreshed) Refreshed.Add(commandName); }
     public void ExecuteCommand(string command) => Executed.Add(command);
     public void OpenFolder(IFolderProvider provider) { }
     public bool OpenBrowser(string url) { Opened.Add(url); return true; }
