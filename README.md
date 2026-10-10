@@ -1,5 +1,9 @@
 # LoupixDeck.Plugin.Slack
-<img width="128" height="128" align="right" src="./icon.png"/>
+
+<img align="right" width="128" height="128" align="right" src="./icon.png"/>
+
+<img width="627" height="268" alt="Screenshot 2026-10-10 at 16 44 08" src="https://github.com/user-attachments/assets/2498bb89-af23-4d58-9244-62cf517a7370" />
+
 
 A [LoupixDeck](https://github.com/RadiatorTwo/LoupixDeck) plugin for Slack:
 
