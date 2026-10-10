@@ -47,6 +47,50 @@ its `.deps.json`, `icon.png` and `plugin.json`.
 The shortcut keys, dials and unread key work straight away. The status keys
 need a token; see the next section.
 
+## Example layout for the Loupedeck CT
+
+[`Profiles/LoupeDeck-CT-example.loupixprofile`](Profiles/LoupeDeck-CT-example.loupixprofile)
+is a ready-made **Slack** workspace for the Loupedeck CT. It has three touch
+pages, both dial columns and the wheel. To use it:
+
+1. Install and enable the plugin (see [Install](#install)).
+2. In LoupixDeck, choose **Import Package…** (in *Settings › Profiles* or the
+   header menu) and select the file.
+3. The preview shows the workspace and the plugin it needs. Import it as a
+   copy into the profile you want it in.
+4. Switch to the *Slack* workspace.
+
+The keys on the *Status* page need tokens; see
+[Connecting your Slack account](#connecting-your-slack-account). Everything
+else works without one.
+
+| Page | Row 1 | Row 2 | Row 3 |
+|---|---|---|---|
+| **Slack** | Open Slack · Unread badge · Jump to · Search | Activity · DMs · Threads · All unreads | Mark read · Mark all read · New message · Browse channels |
+| **Write** | Bold · Italic · Strikethrough · Code | Bulleted list · Numbered list · Quote · Link | Code block · New line · Upload · Edit last |
+| **Status** | Huddle · Mute in huddle · Pause notifications (60 min) · Away | *In a meeting* 60 min · *Lunch* 60 min · *Focusing* 120 min · *Commuting* | Clear status · Set status dialog · Switch workspace · Preferences |
+
+| Control | Top | Middle | Bottom |
+|---|---|---|---|
+| Left dials | Conversations (press: Jump to) | Unreads (press: Mark read) | History (press: All unreads) |
+| Right dials | Zoom (press: Actual size) | Scroll | System volume (press: mute) |
+
+The wheel has three modes: Scroll, Conversations and Unreads. The status
+presets act in all your workspaces. To change a preset's text, emoji, time or
+workspaces, edit its parameters in the button editor.
+
+The package is generated from the plugin's own key designs by
+[`tools/ProfileBuilder`](tools/ProfileBuilder/Program.cs), so every key looks
+exactly as if you had assigned it in the editor. After changing a command's
+look or the layout, regenerate it from a checkout with LoupixDeck next to this
+repository:
+
+```bash
+dotnet run --project tools/ProfileBuilder
+```
+
+A test fails if the package no longer matches the plugin's commands.
+
 ## Connecting your Slack account
 
 The status, pause-notifications and away keys use the Slack Web API with a
@@ -284,6 +328,8 @@ that layout's ideas and redoes the details:
   Cmd+Shift+H and Cmd+Shift+Space instead of M and V.
 - Keys bring Slack to the front before pressing anything, so a key works from
   any app.
+- The same three-way split (navigation, writing, calls and status) ships as
+  the [example layout](#example-layout-for-the-loupedeck-ct) above.
 - New: the unread badge key, workspace and conversation keys, and the status,
   Do Not Disturb and away keys. These work across all your workspaces.
 

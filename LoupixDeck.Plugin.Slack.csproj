@@ -17,8 +17,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- The tests are a project of their own. -->
-    <Compile Remove="tests/**" />
+    <!-- The tests and the profile builder are projects of their own. -->
+    <Compile Remove="tests/**;tools/**" />
   </ItemGroup>
 
   <ItemGroup>

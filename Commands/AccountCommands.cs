@@ -384,7 +384,7 @@ internal sealed class AwayCommand(SlackPlugin plugin) : AccountCommandBase(plugi
             {
                 Name = ActiveState, Description = "Slack shows you active when you are",
                 Layout = SlackKey.State(SlackKey.AubergineHex,
-                    SlackKey.Icon("Icon", "\U000F0765", 0.4, -10, SlackKey.GreenHex), // mdi-circle-medium
+                    SlackKey.Icon("Icon", "\U000F09DE", 0.4, -10, SlackKey.GreenHex), // mdi-circle-medium
                     SlackKey.ValueText("Status", ButtonTextSource.Value, 13, 26))
             }
         ],

@@ -37,7 +37,7 @@ internal sealed class UnreadCommand(SlackPlugin plugin) : SlackCommandBase(plugi
             {
                 Name = UnreadState, Description = "Unread messages, none for you",
                 Layout = SlackKey.State(SlackKey.AubergineHex,
-                    SlackKey.Icon("Dot", "\U000F0765", 0.4, -8), // mdi-circle-medium
+                    SlackKey.Icon("Dot", "\U000F09DE", 0.4, -8), // mdi-circle-medium
                     SlackKey.Caption("Unread"))
             },
             new ButtonStateDescriptor
