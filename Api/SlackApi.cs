@@ -12,8 +12,11 @@ internal sealed class SlackApiException(string method, string error)
     public string Error { get; } = error;
 }
 
-/// <summary>The user Slack says a token belongs to, and the scopes the token carries.</summary>
-internal sealed record Identity(string User, string UserId, string Team, string TeamId, IReadOnlySet<string> Scopes);
+/// <summary>
+/// The user and workspace Slack says a token belongs to, and the scopes the token carries.
+/// <paramref name="Domain"/> is the workspace's subdomain (<c>acme</c> for acme.slack.com).
+/// </summary>
+internal sealed record Identity(string User, string UserId, string Team, string TeamId, string Domain, IReadOnlySet<string> Scopes);
 
 /// <summary>Your own status, Do Not Disturb and presence, as one snapshot.</summary>
 internal sealed record SlackSelf
@@ -52,7 +55,7 @@ internal sealed class SlackApi : IDisposable
     public SlackApi(Func<string?> token, HttpMessageHandler? handler = null)
     {
         _token = token;
-        _http = handler is null ? new HttpClient() : new HttpClient(handler);
+        _http = handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: false);
         _http.BaseAddress = new Uri(BaseUrl);
         _http.Timeout = TimeSpan.FromSeconds(10);
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("LoupixDeck.Plugin.Slack");
@@ -66,7 +69,8 @@ internal sealed class SlackApi : IDisposable
         var scopes = response.Headers.TryGetValues("x-oauth-scopes", out var values)
             ? values.SelectMany(v => v.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)).ToHashSet()
             : new HashSet<string>();
-        return new Identity(Str(json, "user"), Str(json, "user_id"), Str(json, "team"), Str(json, "team_id"), scopes);
+        return new Identity(Str(json, "user"), Str(json, "user_id"), Str(json, "team"), Str(json, "team_id"),
+            DomainOf(Str(json, "url")), scopes);
     }
 
     /// <summary>Reads status, Do Not Disturb and presence in three calls (Tier 3–4: far below the limits at one poll a minute).</summary>
@@ -148,6 +152,12 @@ internal sealed class SlackApi : IDisposable
         if (!Bool(json, "ok")) throw new SlackApiException(method, Str(json, "error") is { Length: > 0 } e ? e : "unknown_error");
         return (json, response);
     }
+
+    /// <summary><c>https://acme.slack.com/</c> → <c>acme</c>; empty when the url is missing or odd.</summary>
+    internal static string DomainOf(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Host.EndsWith(".slack.com", StringComparison.OrdinalIgnoreCase)
+            ? uri.Host[..^".slack.com".Length]
+            : string.Empty;
 
     private static string Str(JsonNode? node, string key) =>
         node?[key] is JsonValue v && v.TryGetValue<string>(out var s) ? s : string.Empty;

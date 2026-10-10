@@ -123,10 +123,9 @@ public sealed class PluginTests
     public async Task Conversation_key_opens_a_deep_link_or_asks_for_one()
     {
         var (plugin, host) = Load();
-        host.Values["team_id"] = "T0001AAAA";
         var cmd = plugin.GetCommands().Single(c => c.Descriptor.CommandName == "Slack.Conversation");
 
-        await cmd.Execute(Ctx(host, ButtonTargets.TouchButton, "C0123ABCD", "general"));
+        await cmd.Execute(Ctx(host, ButtonTargets.TouchButton, "C0123ABCD", "general", "T0001AAAA"));
         await cmd.Execute(Ctx(host, ButtonTargets.TouchButton, "#general"));
 
         Assert.Equal(["slack://channel?team=T0001AAAA&id=C0123ABCD"], host.Opened);

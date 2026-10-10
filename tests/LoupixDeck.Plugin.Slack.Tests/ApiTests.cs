@@ -6,7 +6,7 @@ using Xunit;
 namespace LoupixDeck.Plugin.Slack.Tests;
 
 /// <summary>Answers Slack API calls from a table and records what was sent.</summary>
-internal sealed class FakeSlack : HttpMessageHandler
+internal class FakeSlack : HttpMessageHandler
 {
     public readonly Dictionary<string, Func<HttpResponseMessage>> Routes = new();
     public readonly List<(string Method, string Body, string? Auth)> Calls = new();

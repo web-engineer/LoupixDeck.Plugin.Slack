@@ -9,20 +9,20 @@ namespace LoupixDeck.Plugin.Slack;
 /// <summary>
 /// LoupixDeck plugin entry point. Shortcut keys and dials drive the Slack desktop app with its own
 /// keyboard shortcuts; the unread key mirrors Slack's Dock badge (macOS); the status, Do Not
-/// Disturb and away keys use the Slack Web API with a user token from the user's own Slack app.
-/// The two background workers (badge watcher, account poller) run only while their keys are shown.
+/// Disturb and away keys use the Slack Web API with one user token per connected workspace.
+/// The two background workers (badge watcher, workspace poller) run only while their keys are shown.
 /// </summary>
 public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
 {
-    private const string TokenKey = "user_token";
-    private const string TeamIdKey = "team_id";
+    private const string TokenKeyPrefix = "token_";
+    private const string LegacyTokenKey = "user_token";
     private const string BringToFrontKey = "bring_to_front";
 
     private const string SupportUrl = "https://web-engineer.co.uk/contact";
     private const string IssuesUrl = "https://github.com/web-engineer/LoupixDeck.Plugin.Slack/issues";
 
     private static readonly TimeSpan BadgeIdle = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan SelfIdle = TimeSpan.FromMinutes(3);
+    private static readonly TimeSpan WorkspaceIdle = TimeSpan.FromMinutes(3);
 
     private readonly Lazy<IReadOnlyList<IPluginCommand>> _commands;
     private IPluginHost _host = null!;
@@ -39,20 +39,20 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
         Version = new Version(0, 1, 0),
         SdkVersion = SdkInfo.Version,
         Author = "web-engineer",
-        Description = "Slack from the deck: shortcut keys and dials, an unread badge, huddle keys, and status, Do Not Disturb and away keys.",
+        Description = "Slack from the deck: shortcut keys and dials, an unread badge, huddle keys, and status, Do Not Disturb and away keys across all your workspaces.",
         Icon = LoadEmbeddedIcon("LoupixDeck.Plugin.Slack.icon.png")
     };
+
+    /// <summary>Test hook: the HTTP handler each workspace's API client uses, by token.</summary>
+    internal Func<string, HttpMessageHandler?>? HandlerFactory { get; set; }
 
     // ---- state the commands read ----
 
     internal KeySender Keys { get; private set; } = null!;
     internal BadgeMonitor Badges { get; private set; } = null!;
     internal DemandGate BadgeGate { get; private set; } = null!;
-    internal SlackApi Api { get; private set; } = null!;
-    internal SelfMonitor Self { get; private set; } = null!;
-    internal DemandGate SelfGate { get; private set; } = null!;
-
-    internal string? TeamId => _host.Settings.Get(TeamIdKey, string.Empty) is { Length: > 0 } id ? id.Trim() : null;
+    internal WorkspaceSet Workspaces { get; private set; } = null!;
+    internal DemandGate WorkspaceGate { get; private set; } = null!;
 
     private bool BringToFront => _host.Settings.Get(BringToFrontKey, true);
 
@@ -67,23 +67,31 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
         Badges.Changed += () => host.RequestButtonRefresh(UnreadCommand.Name);
         BadgeGate = new DemandGate(OperatingSystem.IsMacOS, Badges.Start, Badges.Stop, BadgeIdle);
 
-        Api = new SlackApi(() => host.Settings.Get<string>(TokenKey));
-        Self = new SelfMonitor(Api, host.Logger);
-        Self.Changed += RefreshAccountKeys;
-        SelfGate = new DemandGate(() => Api.HasToken, Self.Start, Self.Stop, SelfIdle);
+        Workspaces = CreateWorkspaces();
+        // Through the property, so the gate drives whichever set is current after a settings save.
+        WorkspaceGate = new DemandGate(() => Workspaces.Any, () => Workspaces.Start(), () => Workspaces.Stop(), WorkspaceIdle);
 
-        host.Logger.Info(SlackApp.IsInstalled
-            ? "Slack desktop app found"
-            : "Slack desktop app not found; shortcut keys need it");
+        host.Logger.Info((SlackApp.IsInstalled ? "Slack desktop app found" : "Slack desktop app not found; shortcut keys need it") +
+                         $"; {Workspaces.All.Count} workspace token(s)");
     }
 
     public override void Shutdown()
     {
         BadgeGate?.Dispose();
-        SelfGate?.Dispose();
+        WorkspaceGate?.Dispose();
         Badges?.Dispose();
-        Self?.Dispose();
-        Api?.Dispose();
+        Workspaces?.Dispose();
+    }
+
+    private WorkspaceSet CreateWorkspaces()
+    {
+        var tokens = Enumerable.Range(1, WorkspaceSet.Slots).Select(i => _host.Settings.Get(TokenKeyPrefix + i, string.Empty)).ToArray();
+        // Builds before multi-workspace support kept one token under user_token; it becomes slot 1.
+        if (string.IsNullOrWhiteSpace(tokens[0])) tokens[0] = _host.Settings.Get(LegacyTokenKey, string.Empty);
+
+        var set = new WorkspaceSet(tokens, _host.Logger, HandlerFactory);
+        set.Changed += RefreshAccountKeys;
+        return set;
     }
 
     public override IEnumerable<IPluginCommand> GetCommands() => _commands.Value;
@@ -91,6 +99,7 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
     private IReadOnlyList<IPluginCommand> BuildCommands() =>
     [
         new OpenCommand(this),
+        new WorkspaceCommand(this),
         new ConversationCommand(this),
         new UnreadCommand(this),
         .. ShortcutCommand.All(this),
@@ -106,7 +115,7 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
         new CommandGroupDescriptor
         {
             Group = ShortcutCatalog.Navigate,
-            Description = "Slack: open conversations, move around, unread badge, view and dials",
+            Description = "Slack: workspaces, conversations, moving around, unread badge, view and dials",
             Icon = "\U000F0424" // mdi-pound-box
         },
         new CommandGroupDescriptor
@@ -124,14 +133,14 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
         new CommandGroupDescriptor
         {
             Group = AccountCommandBase.Group,
-            Description = "Slack: status presets, pause notifications and away (needs a Slack token)",
+            Description = "Slack: status presets, pause notifications and away, in every workspace at once or chosen ones (needs Slack tokens)",
             Icon = "\U000F0FFB" // mdi-account-edit-outline
         }
     ];
 
     private void RefreshAccountKeys()
     {
-        foreach (var name in new[] { StatusCommand.Name, ClearStatusCommand.Name, FocusCommand.Name, AwayCommand.Name })
+        foreach (var name in new[] { StatusCommand.Name, ClearStatusCommand.Name, FocusCommand.Name, AwayCommand.Name, WorkspaceCommand.Name })
             _host.RequestButtonRefresh(name);
     }
 
@@ -157,32 +166,17 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
         new PluginSettingDescriptor
         {
             Key = "account",
-            Label = "Status, notifications and away",
+            Label = "Workspaces: status, notifications and away",
             Kind = PluginSettingKind.Heading,
-            Description = "These keys need a token from a small Slack app of your own. " +
+            Description = "These keys need one token per Slack workspace, from a small Slack app of your own in that workspace. Repeat for each workspace: " +
                           "1. Press \"Copy app manifest and open Slack\". " +
-                          "2. In Slack, press Create New App, choose From a manifest, Continue, and pick your workspace. " +
+                          "2. In Slack, press Create New App, choose From a manifest, Continue, and pick the workspace. " +
                           "3. On the JSON tab, delete what is there and paste (Cmd+V / Ctrl+V), then Next and Create. " +
-                          "4. Open Install App in the app's sidebar, press Install to your workspace, then Allow. " +
-                          "5. Copy the User OAuth Token (starts xoxp-) into the field below, Save, and press \"Test token\". " +
-                          "The keys ask Slack once a minute, only while one is on screen."
+                          "4. Open Install App in the app's sidebar, press Install to the workspace, then Allow. " +
+                          "5. Copy the User OAuth Token (starts xoxp-) into the next free slot below and Save. " +
+                          "Then press \"Test tokens\" to see which workspace each slot is."
         },
-        new PluginSettingDescriptor
-        {
-            Key = TokenKey,
-            Label = "User OAuth token",
-            Kind = PluginSettingKind.Password,
-            DefaultValue = string.Empty,
-            Description = "Starts with xoxp-. Stored in this plugin's settings file on this computer."
-        },
-        new PluginSettingDescriptor
-        {
-            Key = TeamIdKey,
-            Label = "Workspace id (optional)",
-            Kind = PluginSettingKind.Text,
-            DefaultValue = string.Empty,
-            Description = "Used by Open conversation keys given a bare channel id. \"Test token\" fills it in."
-        },
+        .. Enumerable.Range(1, WorkspaceSet.Slots).Select(TokenSetting),
         new PluginSettingDescriptor
         {
             Key = "about",
@@ -192,10 +186,25 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
         }
     ];
 
+    private PluginSettingDescriptor TokenSetting(int slot)
+    {
+        var known = Workspaces?.All.FirstOrDefault(w => w.Slot == slot)?.Identity;
+        return new PluginSettingDescriptor
+        {
+            Key = TokenKeyPrefix + slot,
+            Label = known is null ? $"Workspace {slot} token" : $"Workspace {slot} token ({known.Team})",
+            Kind = PluginSettingKind.Password,
+            DefaultValue = string.Empty,
+            Description = slot == 1
+                ? "User OAuth Token, starts with xoxp-. Keys refer to a workspace by its name, subdomain (acme), team id (T…) or slot number."
+                : string.Empty
+        };
+    }
+
     public IReadOnlyList<PluginSettingAction> SettingsActions =>
     [
         new PluginSettingAction { Label = "Copy app manifest and open Slack", Invoke = CopyManifestAsync },
-        new PluginSettingAction { Label = "Test token", Invoke = TestTokenAsync },
+        new PluginSettingAction { Label = "Test tokens", Invoke = TestTokensAsync },
         new PluginSettingAction { Label = "Get support", Invoke = () => OpenLink(SupportUrl, SupportUrl) },
         new PluginSettingAction { Label = "Report a bug or request a feature", Invoke = () => OpenLink(IssuesUrl, IssuesUrl) }
     ];
@@ -219,49 +228,60 @@ public sealed class SlackPlugin : LoupixPlugin, IPluginSettingsPage
             ? "Manifest copied to the clipboard."
             : $"Could not reach the clipboard; copy the manifest from {file}.";
         var where = opened ? "Slack's app page is open" : $"Open {SlackApi.AppsUrl}";
-        return Task.FromResult($"{first} {where}: press Create New App, choose From a manifest, Continue, pick your workspace, " +
-                               "then paste over everything on the JSON tab and press Next, then Create.");
+        return Task.FromResult($"{first} {where}: press Create New App, choose From a manifest, Continue, pick the workspace, " +
+                               "then paste over everything on the JSON tab and press Next, then Create. Repeat for each workspace.");
     }
 
     public void OnSettingsSaved()
     {
-        // The poller restarts from the next key render with the new token.
-        SelfGate.Reset();
+        // Stop the old poller, then swap in a set built from the new tokens; the poller restarts
+        // from the next key render.
+        WorkspaceGate.Reset();
+        var old = Workspaces;
+        Workspaces = CreateWorkspaces();
+        old.Changed -= RefreshAccountKeys;
+        old.Dispose();
+
         Keys.Invalidate();
         RefreshAccountKeys();
+        _ = Workspaces.IdentifyAsync();
     }
 
-    private async Task<string> TestTokenAsync()
+    private async Task<string> TestTokensAsync()
     {
-        if (!Api.HasToken) return "No token set. Follow the steps above, starting with \"Copy app manifest and open Slack\", then paste the User OAuth Token and Save.";
+        if (!Workspaces.Any)
+            return "No tokens set. Follow the steps above, starting with \"Copy app manifest and open Slack\", then paste the User OAuth Token and Save.";
 
-        Identity id;
+        var lines = await Task.WhenAll(Workspaces.All.Select(DescribeAsync)).ConfigureAwait(false);
+        var duplicates = Workspaces.All.Where(w => w.Identity is not null).GroupBy(w => w.Identity!.TeamId).Where(g => g.Count() > 1)
+            .Select(g => $"Slots {string.Join(" and ", g.Select(w => w.Slot))} are the same workspace ({g.First().Name}).");
+        _host.RequestButtonRefresh(WorkspaceCommand.Name);
+        return string.Join(" ", lines.Concat(duplicates));
+    }
+
+    private static async Task<string> DescribeAsync(Workspace w)
+    {
         try
         {
-            id = await Api.AuthTestAsync().ConfigureAwait(false);
+            var id = await w.Api.AuthTestAsync().ConfigureAwait(false);
+            w.Identity = id;
+            w.Error = null;
+            var missing = SlackApi.Scopes.Where(s => !id.Scopes.Contains(s)).ToList();
+            var scopes = missing.Count == 0 ? "all scopes" : $"missing {string.Join(", ", missing)}; add them under OAuth & Permissions and reinstall";
+            var domain = id.Domain.Length > 0 ? $"{id.Domain}, " : string.Empty;
+            return $"Slot {w.Slot}: {id.Team} ({domain}{id.TeamId}) as {id.User}, {scopes}.";
         }
         catch (SlackApiException ex)
         {
+            w.Error = ex.Error;
             return ex.Error is "invalid_auth" or "not_authed" or "token_revoked"
-                ? $"Slack rejected the token ({ex.Error}). Copy the User OAuth Token again."
-                : $"Slack said: {ex.Error}";
+                ? $"Slot {w.Slot}: Slack rejected the token ({ex.Error}); copy the User OAuth Token again."
+                : $"Slot {w.Slot}: Slack said {ex.Error}.";
         }
         catch (HttpRequestException ex)
         {
-            return $"Could not reach Slack: {ex.Message}";
+            return $"Slot {w.Slot}: could not reach Slack ({ex.Message}).";
         }
-
-        if (TeamId != id.TeamId)
-        {
-            _host.Settings.Set(TeamIdKey, id.TeamId);
-            _host.Settings.Save();
-        }
-
-        var missing = SlackApi.Scopes.Where(s => !id.Scopes.Contains(s)).ToList();
-        var scopes = missing.Count == 0
-            ? "All scopes granted."
-            : $"Missing scopes: {string.Join(", ", missing)}. Add them under OAuth & Permissions and reinstall the app.";
-        return $"Signed in as {id.User} on {id.Team} ({id.TeamId}). {scopes}";
     }
 
     private static byte[]? LoadEmbeddedIcon(string name)

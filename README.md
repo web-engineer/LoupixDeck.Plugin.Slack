@@ -6,7 +6,9 @@ A [LoupixDeck](https://github.com/RadiatorTwo/LoupixDeck) plugin for Slack:
 - keys and dials for Slack's own keyboard shortcuts (getting around, reading, writing, formatting, huddles);
 - an unread key that mirrors Slack's badge;
 - keys that open a given channel or DM;
-- status presets, a pause-notifications key and an away key.
+- status presets, a pause-notifications key and an away key. Each works in all
+  your workspaces at once or in chosen ones;
+- a key that switches Slack to a given workspace.
 
 Built against `LoupixDeck.PluginSdk` 1.30.0 and targets .NET 10. Runs on macOS,
 Windows and Linux, with the limits listed under [Platform support](#platform-support).
@@ -48,10 +50,12 @@ need a token; see the next section.
 ## Connecting your Slack account
 
 The status, pause-notifications and away keys use the Slack Web API with a
-user token. You make the token yourself, with a small Slack app that only
-you use.
+user token for each workspace. You make each token yourself, with a small
+Slack app that only you use. A Slack app lives in one workspace, so if you use
+several workspaces, create the same app once in each. That is one manifest and
+up to 8 workspaces.
 
-You need about two minutes and a browser signed in to your Slack workspace.
+Each workspace takes about two minutes. Your browser must be signed in to the workspace.
 
 1. **Copy the manifest.** Open LoupixDeck → Plugins → Slack → Settings and press
    **Copy app manifest and open Slack**. This puts the app's manifest on your
@@ -62,7 +66,9 @@ You need about two minutes and a browser signed in to your Slack workspace.
    **Create New App**. In the *Create new app* dialog, under *Or start your own
    way*, choose **From a manifest** and press **Continue**. Do not pick *AI
    agent*, *Starter app* or *Blank app*.
-3. **Pick your workspace** from the list and press **Next**.
+3. **Pick the workspace** from the list and press **Next**. The list shows every
+   workspace your browser is signed in to; sign in to more at
+   [slack.com/signin](https://slack.com/signin) if one is missing.
 4. **Paste the manifest.** Select the **JSON** tab, delete the example text,
    paste (Cmd+V or Ctrl+V) and press **Next**.
 5. **Create it.** Slack shows a summary with six *User* scopes and no bot
@@ -72,11 +78,13 @@ You need about two minutes and a browser signed in to your Slack workspace.
    admin to approve the app first. Slack then tells you it has asked them.
 7. **Copy the token.** After installing, Slack shows a **User OAuth Token**
    starting with `xoxp-`. It is also on the app's **OAuth & Permissions** page.
-   Paste it into the plugin's *User OAuth token* field and press **Save**.
+   Paste it into the next free *Workspace N token* field and press **Save**.
    Ignore any *Bot User OAuth Token* (`xoxb-`). This app has no bot, so there
    should not be one.
-8. **Check it.** Press **Test token**. It reports who you are signed in as and
-   any missing scopes, and fills in *Workspace id*.
+8. **Check it.** Press **Test tokens**. For each slot it reports the workspace,
+   its subdomain and id, who you are signed in as, and any missing scopes.
+   After that, the slot's label shows the workspace name.
+9. **Repeat steps 1–8 for each other workspace**, using a new slot each time.
 
 The manifest asks only for user scopes (below). The app has no bot, receives
 no events and is never published.
@@ -87,10 +95,11 @@ no events and is never published.
 | `dnd:read`, `dnd:write` | Reading, starting and ending Do Not Disturb |
 | `users:read`, `users:write` | Reading and setting away |
 
-The token sits in this plugin's `settings.json` on your computer and is sent
-only to `slack.com`. While an account key is on screen, the plugin asks Slack
-for your status, Do Not Disturb and presence once a minute: three calls, well
-inside Slack's rate limits. It also asks right after a key changes something.
+The tokens sit in this plugin's `settings.json` on your computer and are sent
+only to `slack.com`. While an account key is on screen, the plugin asks each
+workspace for your status, Do Not Disturb and presence once a minute: three
+calls per workspace, well inside Slack's rate limits, which apply to each
+workspace separately. It also asks right after a key changes something.
 When no account key is shown it makes no calls.
 
 ## Settings
@@ -98,13 +107,12 @@ When no account key is shown it makes no calls.
 | Setting | Key | Default | Notes |
 |---|---|---|---|
 | Bring Slack to the front first | `bring_to_front` | on | Off: shortcuts go to whichever app has focus |
-| User OAuth token | `user_token` | empty | `xoxp-…`, see above |
-| Workspace id (optional) | `team_id` | empty | `T…`; used by *Open conversation* with a bare channel id. *Test token* fills it in |
+| Workspace 1 token … Workspace 8 token | `token_1` … `token_8` | empty | One `xoxp-…` User OAuth Token per workspace, see above. Gaps are fine |
 
 Buttons on the settings page:
 
 - **Copy app manifest and open Slack**: puts the manifest on the clipboard and opens Slack's app page; see [Connecting your Slack account](#connecting-your-slack-account).
-- **Test token**: runs `auth.test` and reports who you are and any missing scopes.
+- **Test tokens**: for each slot, reports the workspace, who you are and any missing scopes. It also flags two slots with the same workspace.
 - **Get support**: opens [web-engineer.co.uk/contact](https://web-engineer.co.uk/contact).
 - **Report a bug or request a feature**: opens this repository's issues.
 
@@ -119,6 +127,7 @@ the button editor.
 | Command id | Key | macOS | Windows, Linux |
 |---|---|---|---|
 | `Slack.Open` | Open Slack | brings Slack forward | brings Slack forward |
+| `Slack.Workspace` | Go to workspace | `slack://open?team=…` | `slack://open?team=…` |
 | `Slack.Conversation` | Open conversation | `slack://channel?…` | `slack://channel?…` |
 | `Slack.Unread` | Unread badge | Dock badge | `macOS only` |
 | `Slack.JumpTo` | Jump to conversation | Cmd+K | Ctrl+K |
@@ -183,18 +192,38 @@ A fast spin sends at most 5 presses per turn event.
 Slack documents no shortcut for huddle video or screen sharing, so there are no
 keys for them.
 
-### Slack Status (needs a token)
+### Slack Status (needs tokens)
+
+Every key here takes a last `Workspace` parameter that says where it acts:
+
+| `Workspace` | Means |
+|---|---|
+| empty or `all` | every workspace with a token |
+| `acme` or `acme.slack.com` | the workspace with that subdomain |
+| `Acme Inc` | the workspace with that name (any case) |
+| `T0123ABCD` | the workspace with that team id |
+| `2` | the workspace in token slot 2 |
+| `acme;2` | several, separated by `;` (a comma would split the parameter) |
 
 | Command id | Parameters | What it does |
 |---|---|---|
-| `Slack.Status` | `Text`, `Emoji`, `Minutes` (e.g. `In a meeting`, `:calendar:`, `60`) | Sets that status; tap again while it is your status to clear it. `Minutes` 0 keeps it until cleared. A green ring round the key shows that this status is the one you have, and the key shows the time left |
-| `Slack.ClearStatus` | none | Clears your status. The key shows your current status |
-| `Slack.Focus` | `Minutes` (default 60) | Pauses notifications (Do Not Disturb) for that long; tap again to resume. States: `paused` (yellow, time left), `scheduled` (inside your Do Not Disturb schedule), `notifying` |
-| `Slack.Away` | none | Sets you away; tap again for automatic. States: `away`, `active` |
+| `Slack.Status` | `Text`, `Emoji`, `Minutes`, `Workspace` (e.g. `In a meeting`, `:calendar:`, `60`, `all`) | Sets that status in the chosen workspaces. Tap again once all of them have it and it is cleared in all of them. `Minutes` 0 keeps it until cleared. A green ring round the key fills with the share of workspaces that have this status. The key shows `3/6` when only some have it, otherwise the time left |
+| `Slack.ClearStatus` | `Workspace` | Clears your status. The key shows your current status, `Mixed` when the workspaces differ, and `2/6` when only some have one |
+| `Slack.Focus` | `Minutes` (default 60), `Workspace` | Pauses notifications (Do Not Disturb) for that long; tap again to resume them wherever they are paused. States: `paused` (yellow, the soonest time left and `2/6` when only some are paused), `scheduled` (all inside their Do Not Disturb schedule), `notifying` |
+| `Slack.Away` | `Workspace` | Sets you away; tap again for automatic, wherever you are away. States: `away` (with `2/6` when only some), `active` |
 
-Without a token these keys show `Set token`. When Slack refuses a change, the
-key briefly shows why: `Missing scope`, `Bad token`, `Rate limited`, `Offline`
-or `Failed`. The full error goes to the log.
+Changes go to every chosen workspace at once. If some fail, the key briefly
+shows `2/6 failed` and the others still change. If all fail, it shows why:
+`Missing scope`, `Bad token`, `Rate limited`, `Offline` or `Failed`. The log
+has each workspace's error. Without any token these keys show `Set token`; a
+`Workspace` that matches nothing shows `No workspace`.
+
+### Go to workspace
+
+`Slack.Workspace(Workspace)` switches the Slack desktop app to one workspace.
+`Workspace` takes the same forms as above, except a list. A team id (`T…`)
+works without a token; a name, subdomain or slot needs that workspace's token.
+The key shows the workspace's name.
 
 ### Unread badge
 
@@ -207,23 +236,28 @@ or `Failed`. The full error goes to the log.
 | `clear` | `All read`, or `Not running` / `No Slack` | Brings Slack forward |
 
 The plugin reads the badge every 2 seconds, only while the key is on screen.
+It is Slack's single app badge, so it covers all your workspaces together.
 On macOS it comes from the Dock (`lsappinfo`), the label Slack itself puts on
 its icon. It needs no token and no extra permission. What counts towards the
 number follows your Slack notification preferences.
 
 ### Open conversation
 
-`Slack.Conversation(Conversation,Caption)` opens one channel, DM or person
-through Slack's deep link. Slack links take ids, not names. Paste any of these
-as `Conversation`:
+`Slack.Conversation(Conversation,Caption,Workspace)` opens one channel, DM or
+person through Slack's deep link. Slack links take ids, not names. Paste any
+of these as `Conversation`:
 
-- a channel, DM or user id, such as `C0123ABCD`. This needs the *Workspace id* setting, which *Test token* fills in;
-- `T0123ABCD/C0123ABCD`;
-- a copied Slack link, such as `https://acme.slack.com/archives/C0123ABCD` or `https://app.slack.com/client/T…/C…`.
+- a copied Slack link, such as `https://acme.slack.com/archives/C0123ABCD`. The
+  plugin finds the workspace from `acme`, as long as that workspace has a token.
+  A link from a workspace without a token is opened as it is, and Slack's own
+  page takes you to the app;
+- `https://app.slack.com/client/T…/C…` or `T0123ABCD/C0123ABCD`;
+- a bare channel, DM or user id, such as `C0123ABCD`, with `Workspace` set
+  (name, subdomain, slot or team id). With a single workspace connected,
+  `Workspace` can stay empty.
 
 To get a conversation's link, right-click it in Slack and choose Copy → Copy link.
-The channel id is also at the bottom of the channel's details. `Caption` is
-only a label for you.
+`Caption` is only a label for you.
 
 ## How it differs from the old Loupedeck Slack profile
 
@@ -237,8 +271,8 @@ that layout's ideas and redoes the details:
   Cmd+Shift+H and Cmd+Shift+Space instead of M and V.
 - Keys bring Slack to the front before pressing anything, so a key works from
   any app.
-- New: the unread badge key, conversation keys, and the status, Do Not Disturb
-  and away keys.
+- New: the unread badge key, workspace and conversation keys, and the status,
+  Do Not Disturb and away keys. These work across all your workspaces.
 
 ## Build from source
 
